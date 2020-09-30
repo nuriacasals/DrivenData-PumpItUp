@@ -1,0 +1,653 @@
+---
+title: ''
+editor_options: 
+  chunk_output_type: console
+---
+
+In this following section we shall talk about what we did to preprocess the data. Only the most relevant plots and statistics will be shown in this section, if you want any other plot not presented here they are appended at the annex.
+
+```{r}
+colors <- c("#cc5f47", "#D9FFB2")
+attach(aigua)
+```
+
+```{r}
+check <- c(2,5,6,18,22) #to recodify
+keep <- c(2,3,4,5,6,7,8,11,13,15,16,17,18,19,21,22,23,24,25,28,29,30,32,34,36,38,39,41)
+recodeNA<-c(7,8,19,21,23,24,28,29,30,32,34,36,38)
+recodeType<-c(3)
+
+#knitr::kable(data.frame(names = names(aigua), keep = as.numeric(1:41 %in% keep), check = as.numeric(1:41 %in% check), numeric = as.numeric(sapply(aigua, is.numeric))))
+```
+
+Our prerpocessing will consist basically of:
+
+- Eliminating irrelevant features
+- Missing recodification
+- Class type recodification
+- Categoritzation of numeric features
+- Joining some categoric factors together
+
+## Features being removed
+
+After a brief examination and solution proposal, we decided to remove certain variables from the dataset. Overall, variables are removed because of:
+
+  * Containing too many levels: Id, wpt_name, subvillage.
+  
+  * Being contained in other variables (_type, _class, _group), these variables have a hierarchical structure each containing the same information from the previous level, sometimes they add a bit more complexity that is not needed: extraction_type_group, extraction_type_class, payment_type, quality_group, quantity_group, source_type, waterpoint_type_group.
+  
+  * Not containing relevant information, these either have the same information collected on other similar variables or the values are all the same: region_code, num_private, recorded_by
+
+<center>
+
+```{r}
+knitr::kable(apply(aigua[,-keep], 2, function(x) length(unique(x))), caption = 'A list of the removed variables and the amount of unique levels each had.')
+```
+
+</center>
+
+```{r}
+aigua2 <- aigua[,keep]
+aigua3 <- aigua2 #we will transform the variables in this new RData
+```
+
+## Features which the missing value level had to be recodified
+
+From the remaining `r ncol(aigua2)` variables, some still have to be processed or reclassified. Since there are different types of codifying for the missing values in our dataset: 
+
+  * **NA codified by '0'**: longitude, construction_year
+
+  * **NA codified by -2e-08**: latitude
+
+  * **NA codified by `unknown`**: management, management_group, payment, water_quality, quantity, source, source_class
+
+  * **NA codified by void character**: public_meeting, scheme_management (which also has a `None` level which we decided to also say was missisng), scheme_name, permit
+
+```{r}
+#Zero
+#aigua3$longitude[aigua3$longitude==0]<-NA
+aigua3$construction_year[construction_year == 0] <- NA
+aigua3$installer[installer == 0] <- NA
+
+#-2e-08
+#aigua3$latitude[aigua3$latitude==-2e-08]<-NA
+
+#Void char
+levels(aigua3$public_meeting)[1]<-NA
+levels(aigua3$scheme_management)[1] <- NA 
+levels(aigua3$scheme_management)[which(levels(aigua3$scheme_management) == "None")] <- NA
+levels(aigua3$scheme_name)[1] <- NA 
+levels(aigua3$permit)[1] <- NA 
+levels(aigua3$installer)[1] <- NA
+levels(aigua3$installer)[1] <- NA
+levels(aigua3$funder)[1] <- NA
+
+#Unknown
+levels(aigua3$management)[which(levels(aigua3$management) == "unknown")] <- NA
+levels(aigua3$management_group)[which(levels(aigua3$management_group) == "unknown")] <- NA
+levels(aigua3$payment)[which(levels(aigua3$payment) == "unknown")] <- NA
+levels(aigua3$water_quality)[which(levels(aigua3$water_quality) == "unknown")] <- NA
+levels(aigua3$quantity)[which(levels(aigua3$quantity) == "unknown")] <- NA 
+levels(aigua3$source)[which(levels(aigua3$source) == "unknown")] <- NA 
+levels(aigua3$scheme_name)[which(levels(aigua3$scheme_name) == "")]  <- NA
+levels(aigua3$source_class)[3] <- NA
+```
+
+How do we know to remove those values from **Latitude and longitude**? They are trickier to see, as we need both of these values together to know if they make sense or not. To view them correctly, we can do it with a map, since we know all the values are well pumps in Tanzania we can probably say that those few values at $(0,0)$ are missing values. The same can be said about $-2e-08$ which must have been a zero, but as a float number it got messed up in translation.
+
+<center>
+
+```{r, fig.cap= 'Latitude and Longitude missing values'}
+# getting the map
+map_preprocessed <- get_map(location = c(lon = mean(aigua3$longitude,na.rm = T), lat = mean(aigua3$latitude,na.rm = T)), zoom = 3, maptype = "toner-lite", scale = 2)
+
+map_bad <- ggmap(map_preprocessed) +
+  geom_point(data =aigua2, aes(x = longitude, y = latitude, fill = "red", alpha = 0.8), size = 1, shape = 21) +
+  guides(fill=FALSE, alpha=FALSE, size=FALSE)
+
+# plotting the map with some points on it
+map_good <- ggmap(map_preprocessed) +
+  geom_point(data =aigua3, aes(x = longitude, y = latitude, fill = "red", alpha = 0.8), size = 1, shape = 21) +
+  guides(fill=FALSE, alpha=FALSE, size=FALSE)
+
+grid.arrange(map_bad, map_good, ncol=2)
+```
+
+</center>
+
+Again since we need both of these values to be able to infer any relevant information we will categorize it to quadrants. Since we know that the country in question is Tanzania we can easily find that it's latitude is compressed between $(0, -12)$ and it's longitude is compressed between $(29,41)$^[https://www.mapsofworld.com/lat_long/tanzania-lat-long.html].
+
+<center>
+
+```{r, fig.cap= 'Quadrants of the well pumps'}
+c1 <- factor(cut(aigua3$latitude, c(-12,-8,-4,-0)),labels=c("LAT3","LAT2","LAT1"))
+c2 <- factor(cut(aigua3$longitud, c(29,33,37,41)),labels=c("LON1","LON2","LON3"))
+
+aigua3$quadrants <- paste(c1,c2,sep="-")
+
+plot_ly(z=~table(c1,c2), colors = colorRamp(c("white", "steelblue")), type = "heatmap")
+```
+
+</center>
+
+## Variables with incorrect class
+
+There are only two variable in the dataset which are incorrectly declared. The first one is `r names(aigua)[recodeType]`, which we will have to change the format from `factor` to `Date`. The second one is `district_code`, which is declared as an `integer` and it should be `factor` as it is not a numerical variable, even though it is coded as one.
+
+```{r}
+aigua3$date_recorded<-as.Date(aigua3$date_recorded)
+aigua3$district_code<-as.factor(aigua3$district_code)
+```
+
+## Numerical variables being categorized
+
+Some variables still have to be processed or reclassified with a more complex procedure. These variables are:
+
+```{r}
+knitr::kable(names(aigua)[check])
+```
+
+**amount_tsh:** Total static head (amount of water available to waterpoint), it seems the variable might been wrongly collected. We have a large amount of zeros and a then huge values. It might be because they used different unit types, but our knowledge in water pump physics is lacking so we don't really know how to interpret it. We thought of a few options:
+
+  * Transform to 4-5 categories
+  * NA observations with larger than 5000
+  * Delete the feature
+  
+<center> 
+
+```{r}
+barplot(amount_tsh, main='Barplot of amount_tsh')
+abline(h=5000,col="red")
+abline(h=100,col="red")
+```
+
+</center> 
+
+We decided to choose the first option, we will create a new variable with 4 different categories. Summary of the new variable:
+
+<center> 
+
+```{r}
+aigua3$amount_tsh_2<-cut(aigua$amount_tsh, c(-1,1,100,5000,10000000))
+knitr::kable(summary(aigua3$amount_tsh_2), caption = 'New variable categorized: amount_tsh_2')
+```
+
+```{r, fig.cap = "amount_tsh categorized into 4 different categories"}
+plot_ly(
+  x = levels(aigua3$amount_tsh_2),
+  y = summary(aigua3$amount_tsh_2),
+  type = "bar",
+  marker = list(color = 'rgb(158,202,225)',
+                      line = list(color = 'rgb(8,48,107)',
+                                  width = 1.5))
+) %>% layout(title = "Plot of amount_tsh categorized")
+```
+
+</center> 
+
+
+After seeing how the CART separated by this variable in classifying status_group, we deiced to also show the bivariate plot. We can see that the ones that have higer pressure in their water pump tend to work better than those who don't.
+
+<center>
+
+```{r, fig.cap = "Distribution of amount_tsh by target variable"}
+aux <- table(aigua3$amount_tsh_2, aigua3$status_group)
+
+
+plot_ly(
+  x = row.names(aux),
+  y = aux[,1],
+  type = "bar", name = colnames(aux)[1], marker = list(color='#D9FFB2') ) %>% 
+    add_trace(y = aux[,2], name = colnames(aux)[2], marker = list(color='#cc5f47'))
+```
+
+</center>
+
+
+**gps_height:** Altitude of the well. After looking at the altitude plots of Tanzania^[http://floodmap.net/Elevation/CountryElevationMap/?ct=TZ] and seeing that there aren't many places with either zero elevation nor sub-sea levels. What we think probably happened is some people wrote **elevation** and some wrote **depth** of the well. Also, there aren't that many places with zero altitude in Tanzania.
+  
+  
+<center> 
+
+```{r, fig.cap = "Distribution of gps_height, we can clearly see two distributions, but none regarding "}
+plot_ly(data = aigua3,
+        x = ~gps_height,
+        type = "histogram", 
+        color = ~status_group,
+        colors = rev(colors))
+```
+
+</center> 
+
+  Options:
+
+  * Separate in 2 new variables, elevation for the postive values and depth for the negative values.
+  * With the of latitude and longitude imputate the real height given from the the `geonmaes package`
+  * Delete
+
+We decided to go with option 2, imputate the real height with the given latitude and longitude. While the first option was quite appealing, we just didn't dispose of enough data, only `r sum(gps_height < 0)` which is roughly `r sum(gps_height < 0)/length(gps_height)`% of the data is not enough. It migh have been interesting if the distribution of wells that had negative values were only the wells of one of the target values, however this was not the case. We imputated the data with the `geonames package`, which is basically a call to the geonames API^[http://www.geonames.org/]. For most of the values we used the `srtm3` (Shuttle Radar Topography Mission) elevation data since we found it was the method it gave the most similar results. However, for the values that this method gave `-32768`, which are ocean areas that have been masked as "no data"^[http://www.geonames.org/export/web-services.html#srtm3], we used the `GTOPO30` method, which gave different results for these values. For the values that the `GTOPO30` function also gave ocean area we manually imputated a value of zero.
+
+<center> 
+
+```{r, fig.cap = "Distribution of positive values, 'Elevation'"}
+plot_ly(data = aigua3[which(aigua3$gps_height > 0),],
+        y = ~gps_height, 
+        type = "box", 
+        color = ~status_group,
+        colors = rev(colors))
+```
+
+```{r, fid.cap = "Distribution of negative values, 'Depth'"}
+plot_ly(data = aigua3[which(aigua3$gps_height < 0),],
+        y = ~gps_height, 
+        type = "box", 
+        color = ~status_group,
+        colors = rev(colors))
+```
+
+
+
+```{r, eval = F}
+# aux <- aigua3 #[-which(is.na(aigua3$longitude)),]
+# 
+# library(geonames)
+# k <- 1
+# GNstrm_Height <- vector(, length = 20000)
+# while(TRUE){
+# for(j in 6:1){
+#   options(geonamesUsername= paste("mineria", j, sep = "_")) 
+#   for(i in 1:2000){
+#     if(k > nrow(aux)){
+#       break
+#     }
+#     GNstrm_Height[k] <- GNsrtm3(aux$latitude[k], aux$longitude[k])$srtm3
+#     k <- k + 1
+#     cat(k, "\n")
+#   }
+# }
+# }
+# 
+# aigua3$gps_height <- GNstrm_Height
+# 
+# aux2 <- aigua3[which(aigua3$gps_height == -32768),]
+# aux_height <- GNstrm_Height[which(GNstrm_Height == -32768)]
+# 
+# for(i in 1:length(aux_height)){
+#     aux_height[i] <- GNgtopo30(aux2$latitude[i], aux2$longitude[i])$gtopo30
+# }
+# 
+# aux_height[aux_height == -9999] <- 0
+# 
+# GNstrm_Height[which(GNstrm_Height == -32768)] <- aux_height
+
+#save(GNstrm_Height, file =  "height_1_20000.RData")
+```
+
+```{r}
+load("height_1_20000.RData") 
+aigua3[,"gps_height"] <- GNstrm_Height
+```
+
+
+```{r, fig.cap = "Distribution of 'Elevation'"}
+plot_ly(data = aigua3,
+        y = ~gps_height, 
+        type = "box", 
+        color = ~status_group,
+        colors = rev(colors))
+```
+
+
+</center> 
+
+**population** population around the well. With `r length(which(population==0))` registers that have a population of zero we consider categorizing this variable as well, we also find that the population with only 1 is: `r length(which(population==1))`which doesn't make much sense looking at the graph. We might expect that having a working water well they will move closer to it to benefit from it.
+
+<center>
+
+```{r, fig.cap="Distribution of population according to the target variable"}
+plot_ly(data = aigua3,
+        y = ~population, 
+        type = "box", 
+        color = ~status_group,
+        colors = rev(colors))
+```
+
+```{r}
+knitr::kable(quantile(population), caption = "Quantiles of population")
+```
+
+</center>
+
+Options:
+  
+  * Categorize in levels
+  * Keep as it is
+  * Delete
+    
+We consider categorizing it because this is a feature that we think could be interesting for posterior analysis.
+
+<center>
+
+```{r}
+aigua3$population_2<-cut(aigua$population, c(-0.5,0,1,100,215,2000,30500))
+knitr::kable(summary(aigua3$population_2), caption = 'Distribution of population')
+```
+
+</center>
+
+## Manual Fuzzy match
+
+**installer:** Organization that installed the well. With `r length(levels(installer))` different levels, we find very similar names among them.
+
+Even though there are over 2000 levels, the installer could be a relevant variable. Therefore it will be kept but might be ignored in further stages of this study. Before using it, we will try to preprocess it in order to decrease the number of levels.
+
+```{r}
+dd1 <- as.data.frame(table(aigua3$installer))
+# sum(dd1$Freq==1)
+aigua3$installer <- lowerCase(aigua3$installer)
+dd2 <- as.data.frame(table(aigua3$installer))
+# head(dd2[with(dd2, order(-Freq)), ])
+# sum(dd2$Freq==1)
+```
+
+In the previous code, the lowerCase function has been used and as a result some there has been a decrease of `r length(levels(aigua$installer))- length(levels(aigua3$installer))`. Also, the number of levels that had a frequency of 1 went from `r sum(dd1$Freq==1)` to `r sum(dd2$Freq==1)`.
+
+Finally, a conceptual level grouping is performed only for levels with a frequency of over a hundred. These are mostly typos or different ways they spelled things. For example `unisef` $\rightarrow$ `unicef`, `oxfarm` $\rightarrow$ `oxfam`, among many others.
+
+```{r}
+aigua3$installer <- as.factor(aigua3$installer)
+
+levels(aigua3$installer)[which(levels(aigua3$installer)=='ministry of water engineer'|levels(aigua3$installer)=='ministryof water')] <- "ministry of water"
+
+levels(aigua3$installer)[which(levels(aigua3$installer)=='unisef')] <- "unicef"
+
+levels(aigua3$installer)[which(levels(aigua3$installer)=='oxfarm')] <- "oxfam"
+
+levels(aigua3$installer)[which(levels(aigua3$installer)=='finwater'|levels(aigua3$installer)=='finw'|levels(aigua3$installer)=='fini water'|levels(aigua3$installer)=='finn water')] <- "fin water"
+
+levels(aigua3$installer)[which(levels(aigua3$installer)=='cebtral government'|levels(aigua3$installer)=='cental government'|levels(aigua3$installer)=='centra government'|levels(aigua3$installer)=='cetral government /rc'|levels(aigua3$installer)=='tanzania government'|levels(aigua3$installer)=='tanzanian government'|levels(aigua3$installer)=='central govt')] <- "central government"
+
+levels(aigua3$installer)[which(levels(aigua3$installer)=='gover'|levels(aigua3$installer)=='goverm'|levels(aigua3$installer)=='govern'|levels(aigua3$installer)=='governmen'|levels(aigua3$installer)=='gove')] <- "central government"
+
+levels(aigua3$installer)[which(levels(aigua3$installer)=='kkt')] <- "kkkt"
+```
+
+```{r}
+dd3 <- as.data.frame(table(aigua3$installer))
+# head(dd3[with(dd3, order(-Freq)), ])
+# sum(dd3$Freq==1)
+```
+
+The final grouping consists in considering as "other" all levels apearing less than 10 times throughout the database.
+
+```{r}
+levels(aigua3$installer)[which(levels(aigua3$installer) %in% dd3[which(dd3$Freq<10),1])] <- "other"
+```
+
+Finally, the database has `r length(levels(aigua3$installer))` levels. While we wanted to do a fuzzy match for the previous feature, it was simply not feasible, there are too many levels with similar names, but not enough to be able to just join them. It ended up joining values that were not supposed to be joined before values that were supposed to be joined together.
+
+
+
+**scheme_name** Who operates the waterpoint. Similarly to `installer` we group all the levels apearing less than 10 times into an "other" category.
+
+```{r}
+# length(levels(aigua3$scheme_name))
+aigua3$scheme_name <- as.factor(scheme_name)
+ds3 <- as.data.frame(table(aigua3$scheme_name))
+# head(ds3[with(ds3, order(-Freq)), ])
+
+# nrow(ds3[which(ds3$Freq<10),])
+levels(aigua3$scheme_name)[which(levels(aigua3$scheme_name) %in% ds3[which(ds3$Freq<10),1])] <- "other"
+```
+
+
+We reduced from `r length(levels(scheme_name))` to only `r length(levels(aigua3$scheme_name))` levels.
+
+Finally we join a few levels in other features:
+
+**water_quality** We have the levels `flouride abandoned` and `salty abandoned` which we joined into their corresponding level `flouride` and `salty`. As the abandoned is an adjective describing something other than what the feature is trying to depict.
+
+**waterpoint_type** We joined the level `dam` into `other` as we only had 3 observations of `dam`.
+
+```{r}
+levels(aigua3$water_quality)[which(levels(aigua3$water_quality) == "fluoride abandoned")] <- "fluoride"
+levels(aigua3$water_quality)[which(levels(aigua3$water_quality) == "salty abandoned")] <- "salty"
+levels(aigua3$waterpoint_type)[which(levels(aigua3$waterpoint_type) == "dam")] <- "other"
+```
+
+For the remaining character variables are all converted to factor if appropiate and we will do a droplevels to eliminate any residue that might have been left.
+
+```{r}
+aigua3[sapply(aigua3, is.character)] <- lapply(aigua3[sapply(aigua3, is.character)], 
+                                       as.factor)
+```
+
+Why haven't we done the fuzzy match? As stated earlier, we tried to do it, however we ran into problems that it joined similar names that were not supposed to be joined before things we thought that they were supposed to be. To do it correctly we would need the help of an expert in the local language to be able to discern what is the same and what is a typo. We also considered joining all the levels with few observations into a lump `other` (like we did with `water_quality`), however, doing so, we ended up distorting the original data distribution. The missing values we got were horrible compared to not lumping them together, the same with the models.
+
+```{r}
+detach(aigua)
+```
+
+
+```{r}
+# # funder
+# aigua3$funder2 <- fct_lump(aigua3$funder, p = 0.003)
+# # installer
+# aigua3$installer2 <- fct_lump(aigua3$installer, p = 0.005)
+# # lga
+# aigua3$lga2 <- fct_lump(aigua3$lga, p = 0.01)
+# # ward
+# aigua3$ward2 <- fct_lump(aigua3$ward, p = 0.001)
+# # scheme_name
+# aigua3$scheme_name2 <- fct_lump(aigua3$scheme_name, p = 0.001)
+```
+
+
+```{r, eval = F}
+rm(list=setdiff(ls(), "aigua3"))
+aigua3 <- droplevels(aigua3)
+#save(aigua3, file = "ALT_dades_prepro.RData")
+load("ALT_dades_prepro.RData")
+```
+
+
+
+## Imputing missing data
+
+In order to not bias the analysis we shall remove the rows with missing values in either the latitude or longitude. We can afford to do this because the missing data is very small relatively to the size of the dataset. For the rest of the missing values we will use MICE, however we will not imputate on the categorical variables, because we feel that a missing value is actually more useful to us, we might think that having a missing value in a category is for a reason and that not knowing might help the models in finding better values. After this first draft we might change it to try and imputate some missing values of some more relevant categories. For now, though, we will only imputate the numerical variable, `construction_year` because it is the only one that has missing values.
+
+First let's check the amonut of missing values that we have in our dataset. We shall remove these variables to help the MICE function. Secondly, we didn't actually do the MICE first because since we have variables with many levels we were running in combinatorial problems and the computational time was to high to be able to do anything. The find out what variables we will use for the MICE we use first the `aregImpute` function from `Hmisc` package, playing with it we find the optimal variables that we can use and will give us a first estimate of the missing values. 
+
+<center>
+
+```{r}
+aux <- aigua3[ , apply(aigua3, 2, function(x) any(is.na(x)))]
+aggrplot <- aggr(aux, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, only.miss = T, bars = T, plot = F,labels=names(aux), cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+```
+
+```{r, results='hide',fig.keep='all', fig.width=6, fig.height=12}
+invisible(plot.aggr(aggrplot, sortVars = T, combined = F, only.miss = T, cex.axis = .5))
+```
+
+</center>
+
+```{r}
+for(i in 1:ncol(aigua3)){
+  if(is.factor(aigua3[,i])){
+    aigua3[,i] <- fct_explicit_na(aigua3[,i], paste('NA', names(aigua3)[i], sep = '_'))
+}}
+```
+
+
+```{r, eval = F}
+f <- aregImpute(~construction_year + gps_height + basin + public_meeting + permit + management + management_group + payment + water_quality + quantity + source + source_class + waterpoint_type + quadrants + amount_tsh_2 + population_2 , aigua3, n.impute = 5)
+
+construction_year <- as.numeric(impute.transcan(f, imputation = 2, data = aigua3, list.out = TRUE, pr = FALSE, check = FALSE)$construction_year)
+
+plot(construction_year, aigua3$status_group, col = is.na(aigua3$construction_year))
+```
+
+
+```{r, eval =F}
+data <- aigua3[, !names(aigua3) %in% c('population', 'amount_tsh')] 
+
+ini <- mice(data, maxit=0, pri=F)
+pred <- ini$pred
+    pred[, c( 'funder', 'installer', 'region', 'district_code', 'lga', 'ward', 'scheme_name', 'extraction_type', 'scheme_management', 'district_code', 'date_recorded', 'longitude', 'latitude')] <- 0 
+    meth <- ini$meth
+imp <- mice(data, m=1, maxit=10, printFlag=TRUE, pred=pred, meth=meth, seed=1714) 
+aigua4 <- complete(imp, 1)
+```
+
+
+
+Using the same variables used for `aregImpute` we finally do the MICE. Although it was probably innecessary because the difference between the both are neglibile. Looking at the following plots we can see that MICE did a pretty good job.
+
+```{r}
+colors <- c("#cc5f47", "#D9FFB2")
+
+load("ALT_aigua_sample_imputat.RData")
+
+load("MICE_result.RData")
+```
+
+
+<center>
+
+```{r, fig.cap = 'Density of the imputated values vs. the real values'}
+densityplot(imp)
+```
+
+
+```{r, fig.cap = 'Density of the imputated values vs. the real values by the target feature'}
+xyplot(imp, construction_year ~ status_group)
+```
+
+</center>
+
+```{r, eval = F}
+save(aigua4, file = "ALT_aigua_sample_imputat.RData")
+save(imp, file = "MICE_result.RData")
+```
+
+
+## Descriptive
+
+In this section we will look at some of the more relevant features that relate to the target variable.
+
+### Target **status_group**
+
+Our target variable has three different modalities. Although we could group `functional needs repair` with `non functional` as both need repair, and that is the objective of this project finding out which ones need repair. For now let's keep it this way. We see that the response is not balnaced (58.5% vs. 41.5%).
+
+<center>
+
+```{r}
+r <- which(names(aigua4) == 'status_group')
+Frequency <- table(aigua4[,r])
+aux <- names(Frequency)
+colors <- c("#cc5f47", "#D9FFB2")
+ax <- list(
+  zeroline = F,
+  showline = T,
+  mirror = "ticks"
+)
+
+plot_ly(x = aux, 
+        y = Frequency, 
+        type = "bar",
+        color = names(Frequency), colors = rev(colors)) %>% 
+        layout(title = paste("Distribution of", names(aigua4)[r]),
+               showlegend = T, xaxis = ax, yaxis = ax, bargap = 0.1)
+```
+
+
+</center>
+
+### Latitude and Longitude
+
+Unfortunatley we do not seem to see any clear relationship between the latitude and longitude and if they work or not. Nor any of them, all the bivariate plots are found in the annex.
+
+<center>
+
+```{r, fig.cap="Latitude and Longitude with target feature, geolocalitzation"}
+g <- c(
+  scope = 'africa',
+  showframe = F,
+  showland = T,
+  landcolor = toRGB("grey90"),
+  showcoastlines = T,
+  countrycolor = toRGB("white"),
+  coastlinecolor = toRGB("white"),
+  projection = list(type = 'Mercator'),
+  list(lataxis = list(range = c(-12.5, 0))),
+  list(lonaxis = list(range = c(28, 42)))
+)
+
+aigua3$status_group <- factor(aigua3$status_group, levels=rev(levels(aigua3$status_group)))
+
+p <- aigua3 %>%
+  plot_geo(
+    locationmode = 'country names', sizes = c(1, 600), color = I("black")
+  ) %>%
+  add_trace(aigua4 = aigua3,
+            y = ~latitude, x = ~longitude, 
+            color = ~status_group,
+            colors = colors,
+            marker = list(opacity = 0.5,
+                          line = list(color = 'black', width = 0.5)), hoverinfo = 'none') 
+
+p  %>% layout(geo = g)
+```
+
+</center>
+
+### Construction year
+
+We found that the variable construction year is pretty corrleated with the target feature, which makes sense since the more recent the well has been built the more sturdy it has to be and hasn't had the test of time pass it yet. Although seeing the distribution they seem pretty similar.
+
+
+<center>
+
+```{r, fig.cap = "Distribution of construction year by target variable"}
+plot_ly(data = aigua4,
+        y = ~construction_year, 
+        type = "box", 
+        color = ~status_group,
+        colors = rev(colors))
+```
+
+
+</center>
+
+### Correlation between features
+
+To start the exploration analysis, we first present the results of a correlation plot between features. Observing first the numerical correlation plot we observe nothing interesting. We can see how elevation is correlated between latitude and longitude, and also how latitude and longitude present some correlation. This doesn't really give us that much information. 
+
+For the categorical features, we observe that lga and ward are highly positively correlated, but they both are also very correlated with many other variables. As we explained previously, managment and managment_group, as well as, source and source_class, are very highly positively correlated.
+
+As commented, status_group, our target feature, doesn't seem to have high correlation with any of the features except ward, but every feature is correlated with ward. There does not seem to be any feature that stands out in how status_group will be predicted.
+
+We will keep for now these features but we won't use them for the most techniques unless stated otherwise. 
+
+<center>
+
+
+```{r, fig.cap='Numerical correlation plots'}
+catcorrm <- function(vars, dat) sapply(vars, function(y) sapply(vars, function(x) assocstats(table(dat[,x], dat[,y]))$cramer))
+
+index_char <- which(sapply(aigua4,function(i) is.factor(i)))
+
+cor<-catcorrm(names(aigua4)[index_char],aigua4)
+corrplot(cor(aigua4[,c(3,5,6,16)]),method = 'circle',tl.col='black',title='Numerical variables')
+```
+
+```{r, fig.cap='Categorical correlation plots'}
+corrplot(cor, tl.col='black',title='Categorical variables')
+```
+
+</center>
+
+```{r}
+rm(list=setdiff(ls(), "aigua4"))
+```
+

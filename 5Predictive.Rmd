@@ -1,0 +1,354 @@
+---
+title: ""
+---
+
+The final aim of this project is to be able to predict the targer feature **status_group**. This variable has two levels, functioning well and completely unfunctional. Therefore it's a variable that overall shows the state of the well and it could be really valuable to be able to predict whether a well has a high or low chance of breaking. Since we have such a big dataset we only report the results of the algorithms.
+
+## Validation protocol
+
+### Data slicing
+
+Data slicing is a step to split data into train and test set. Training data set can be used specifically for our model building. Test dataset should not be mixed up while building model. Even during standardization, we should not standardize our test set.
+
+```{r}
+rm(list=ls())
+load('ALT_MODELS_DEFINITIU.RData')
+```
+
+```{r eval=FALSE}
+set.seed(7)
+# create a list of 70% of the rows in the original dataset we can use for training
+validation_index <- createDataPartition(aigua4$status_group, p=0.70, list=FALSE)
+# select 30% of the data for validation
+validation <- aigua4[-validation_index,c(3 , 5 , 6 , 7,  8 ,12 ,15 ,16 ,18 ,20, 22 ,23 ,26 ,27 ,28, 29)]
+validation_bagging <- aigua4[-validation_index,c(3 , 4, 5 , 6 , 7,  8 ,12 ,15 ,16 ,18 ,20, 22 ,23 ,26 ,27 ,28, 29)]
+
+# use the remaining 70% of data to training and testing the models
+dataset <- aigua4[validation_index,c(3 , 5 , 6 , 7,  8 ,12 ,15 ,16 ,18 ,20, 22 ,23 ,26 ,27 ,28, 29)]
+dataset_bagging <- aigua4[validation_index,c(3 , 4, 5 , 6 , 7,  8 ,12 ,15 ,16 ,18 ,20, 22 ,23 ,26 ,27 ,28, 29)]
+
+#We should only have either factors or numeric
+sapply(dataset, class)
+
+dataset <- as.data.frame(dataset,stringsAsFactors=TRUE)
+```
+
+Before modeling, a list of 80% of the rows in the original dataset (with `r nrow(dataset)` rows) is created to use for training. While 20% is kept for testing (`r nrow(validation)` rows).
+
+Class distribution is assessed in order to check how well balanced are the different classes. As it can be observed, the wells that are functional but need repair are a minority. Therefore, in further stages of this report it might be merged with one of the other classes. In the following tables we can check the distribution of both datasets we now created.
+
+<center>
+
+```{r}
+#Class distribution
+
+percentage1 <- prop.table(table(dataset$status_group)) * 100
+t1<-cbind(freq=table(dataset$status_group), percentage=percentage1)
+knitr::kable(t1, caption = 'Train dataset')
+
+percentage2 <- prop.table(table(validation$status_group)) * 100
+t2<-cbind(freq=table(validation$status_group), percentage=percentage2)
+
+knitr::kable(t2, caption = 'Validation dataset')
+```
+
+</center>
+
+
+### Cross - validation
+
+Cross-validation is a method of estimating the expected prediction error while ensuring the model is not over fitting. There are many types of cross-validation.
+
+**Hold Out Method:** Training Sample (70%) vs Testing sample (30%) $\rightarrow$ if the error rate is similar on both $\rightarrow$ not overfited. Advantage: low computing time. This method is prone to sample bias.
+
+**K-Fold Cross Validation:** The sample is splited into K equal sub size samples. All of the models used but the random forest have been calculated through a 10-fold cross validation. This has been to the huge  computational cost of the tuning of the random forest so we had to reduce it to a 5-fold cross validation.  Prediction error = Average error. As the response is categorical: Accuracy. The result you get is the average accuracy of all the folds.
+Advantages: how data is divided matters less as selection bias is no longer present.
+
+Algorithms will be performed using a 10-fold crossvalidation. This slows down the search process, however it's intended to limit and reduce overfitting on the training set. It won't remove overfitting entirely, so holding back a validation set for final checking is a great idea.
+
+```{r eval=FALSE}
+# Run algorithms using 10-fold cross validation
+control <- trainControl(method="cv", number=10)
+metric <- "Accuracy"
+```
+
+### Avaluation criterium
+
+These are the metrics we have used to evaluate algorithms on our dataset:
+
+**Accuracy** is the percentage of correctly classified instances out of all the instances. It is more useful on a binary classification than multi-class classification problems, because it can be less clear exactly how the accuracy breaks down across those classes in muli-class.
+
+**Kappa** or Cohen's Kappa^[http://www.pmean.com/definitions/kappa.htm] is similar to classification accuracy, except that it is normalized at the baseline of random chance on your dataset. It is a more useful measure to use on problems that have an imbalance in the classes (e.g. 70-30, split for classes 0 and 1, and you can achieve 70% accuracy by predicting all instances are class 0). It basically tells you how much better your classifier is performing over the performance of a classifier that simply guesses at random according to the frequency of each class.
+
+## Models considered  
+
+Overall, this study has tried to select a wide range of different models. Using both parametric and non-parametric approaches, we considered every model according a specific aim. 
+
+Firstly, **knn** and **lda** have been chosen due to it's computational efficiency. Which, in a database as large as ours, can be an important factor. Both methods, are known for it's simplicity and will be used as an accuracy baseline.
+
+**Cart** method has been used due to the visual ease, it provides a low level techincal understanding fo the prediction it returns.
+
+On a similar approach, **logistic regression** has been used mainly to be able to evaluate the effect of each variable, and also to add a parametric model.
+
+Finally, in order to improve the accuracy of our prediction two black-box models have been chosen: Both the **tree bagging** and **random forests** algorithms were chosen. The former due to it's ability to manage high number of levels.
+The latter due to it's known prediction accuracy.
+
+## Training results
+
+### Logistic regression
+
+The following binary logistic model is used to estimate the probability of a binary response based on all of our predictors and variables. If this were to be the selected model, it would allow to analyse the presence of a risk factor increases the odds of a given outcome by a specific factor. In this case, the tuning is done automathically by the caret^[https://topepo.github.io/caret/index.html] itself. Trying several combinations of the parameters **cost** (c), **tolerance** (epsilon) & **Loss function** (primal or dual).
+
+```{r eval=FALSE}
+set.seed(7)
+fit.lg <- train(as.factor(status_group)~., data=dataset, method="regLogistic", metric=metric, trControl=control)
+```
+
+```{r}
+print(fit.lg)
+```
+
+<center>
+
+```{r, fig.cap = "Result of logistic regression training"}
+plot(fit.lg)
+```
+
+</center>
+
+### Linear distriminant analysis
+
+LDA provides a less direct approach to modeling the predicted probabilities given some set of predictor(s) X. This algorithm models the distribution of the predictors X separately in each of the response classes (given Y's), and the uses Bayes' theorem to flip them around into estimates. When these distributions are assumed to be normal, it turns out that the model is very similar to the logistic regression.
+
+```{r eval=FALSE}
+set.seed(7)
+fit.lda <- train(as.factor(status_group)~., data=dataset, method="lda", metric=metric, trControl=control)
+```
+
+```{r}
+print(fit.lda)
+```
+
+### CART
+
+We need to specify the complexity parameter in order to prune our tree. We will choose the complexity parameter associated with the minimum possible cross-validated error.
+
+```{r eval=FALSE}
+set.seed(7)
+fit.cart <- train(as.factor(status_group)~., data=dataset, method="rpart", metric=metric, trControl=control)
+```
+
+```{r}
+print(fit.cart)
+```
+  
+<center>
+
+```{r, fig.cap = "Result of CART training"}
+plot(fit.cart)
+```
+
+</center>
+
+After viewing the results, we selected the CART with the complexity parameter of: `r as.numeric(fit.cart$bestTune)`.
+
+<center>
+
+```{r, fig.cap = "Result of CART training, but pretty"}
+fancyRpartPlot(fit.cart$finalModel)
+```
+
+</center>
+
+The resulting tree is pretty simple, we define the splits according to **construction year** and **amount tsh**, we split according to how old the well is and the amount of pressure the well has. The model results with an accuracy of around 70%, a pretty good result considering the simplicity of the model.
+
+### KNN
+
+The most commonly used distance measure is Euclidean distance, also known as the usual (simple) distance. The usage of Euclidean distance is highly recommended when data is dense or continuous, it's the best proximity measure.
+
+KNN classifier is also considered to be an instance based learning / non-generalizing algorithm. It stores records of training data in a multidimensional space. For each new sample & particular value of K, it recalculates Euclidean distances and predicts the target class. So, it does not create a generalized internal model.
+
+```{r eval=FALSE}
+set.seed(7)
+fit.knn <- train(as.factor(status_group)~., data=dataset, method="knn", metric=metric, trControl=control)
+```
+
+```{r}
+print(fit.knn)
+```
+
+<center>
+
+```{r, fig.cap = "Result of KNN training"}
+plot(fit.knn)
+```
+
+</center>
+
+The best parameter is `r as.numeric(fit.knn$bestTune)`, because it's the one that returns the best accuracy (around 67%).
+
+### Random Forest
+
+We will use the popular Random Forest algorithm as the subject of our algorithm tuning. When tuning an algorithm, it is important to have a good understanding of the algorithm so that you know what effect the parameters have on the model you are creating.
+
+In this case study, we will stick to tuning two parameters, namely the **mtry** and the **ntree** parameters that have the following effect on our random forest model. There are many other parameters, however these two parameters are perhaps the most likely to have the biggest effect on your final accuracy.^[https://machinelearningmastery.com/tune-machine-learning-algorithms-in-r/]
+
+*ntree*: Number of trees to grow. This should not be set as a too small number, to ensure that every input row gets predicted at least a few times.
+
+*mtry*: Number of variables randomly sampled as candidates at each split. Note that the default values are different for classification (sqrt(p) where p is number of variables in x) and regression (p/3) but as we will tune the models this default values won't be used.
+
+```{r eval=FALSE}
+customRF <- list(type = "Classification", library = "randomForest", loop = NULL)
+customRF$parameters <- data.frame(parameter = c("mtry", "ntree"), class = rep("numeric", 2), label = c("mtry", "ntree"))
+customRF$grid <- function(x, y, len = NULL, search = "grid") {}
+customRF$fit <- function(x, y, wts, param, lev, last, weights, classProbs, ...) {
+  randomForest(x, y, mtry = param$mtry, ntree=param$ntree, ...)
+}
+customRF$predict <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
+   predict(modelFit, newdata)
+customRF$prob <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
+   predict(modelFit, newdata, type = "prob")
+customRF$sort <- function(x) x[order(x[,1]),]
+customRF$levels <- function(x) x$classes
+
+
+# train model
+control <- trainControl(method="repeatedcv", number=5, repeats=3)
+tunegrid <- expand.grid(.mtry=c(1,3,8,15), .ntree=c(50,250,750,1000,1500))
+set.seed(100)
+fit.rf.tuned <- train(status_group~., data=dataset, method=customRF, metric=metric, tuneGrid=tunegrid, trControl=control)
+```
+
+```{r}
+print(fit.rf.tuned)
+```
+
+<center>
+
+```{r, fig.cap = "Result of Random Forest training"}
+plot(fit.rf.tuned)
+```
+
+
+```{r, eval = F}
+set.seed(7)
+tunegrid <- expand.grid(.mtry=c(15))
+fit.rf.bo <- train(as.factor(status_group)~., data=dataset, method="rf", metric=metric, trControl=control, tuneGrid=tunegrid)
+```
+
+</center>
+
+### SVM
+
+The principle behind an SVM classifier (Support Vector Machine) algorithm is to build an hyperplane separating data for different classes. This hyperplane building procedure varies and is the main task of an SVM classifier. The main focus while drawing the hyperplane is to maximizing the distance from the hyperplane to the nearest data point of either class. These nearest data points are known as Support Vectors.
+
+We will try to build a model using Non-Linear Kernel like Radial Basis Function. In Radial kernel, it needs to select proper value of Cost (C) parameter and sigma, $\sigma$, parameter.
+
+*sigma*: 	In case of a probabilistic regression model, the scale parameter of the hypothesized (zero-mean) laplace distribution estimated by maximum likelihood.
+
+*C*: cost of constraints violation (default: 1), it is the C-constant of the regularization term in the Lagrange formulation.
+
+```{r eval=FALSE}
+set.seed(7)
+svmGrid <- expand.grid(sigma = c(0.025, 0.05, 0.06, 0.07,0.08, 0.09, 0.1), C = c(0.5, 1, 2))
+fit.svm.tuned <- train(as.factor(status_group)~., data=dataset, method="svmRadial", metric=metric, trControl=control,
+                 tuneGrid=svmGrid)
+```
+
+```{r}
+print(fit.svm.tuned)
+```
+
+<center>
+
+```{r, fig.cap = "Result of SVM training"}
+plot(fit.svm.tuned)
+```
+
+</center>
+
+### Bagging
+
+Bagging is a way to decrease the variance of your prediction by generating additional data of training from your original dataset using combinations of repetitions to produce multisets of the same cardinality/size as your original data. This model has no tuning parameters.
+
+```{r eval=FALSE}
+set.seed(7)
+fit.treebag <- train(as.factor(status_group)~., data=dataset_bagging, method="treebag", metric=metric, trControl=control)
+```
+
+```{r}
+print(fit.treebag)
+```
+
+### Comparison of the best results
+
+In the following plot, we present a compilation of the results of each of the algorithms used in the validation set.
+
+```{r}
+results <- resamples(list(lg=fit.lg,lda=fit.lda, cart=fit.cart, knn=fit.knn, bg=fit.treebag,svm=fit.svm.tuned,rf=fit.rf.bo))
+
+summary(results)
+```
+
+
+```{r, fig.cap = "Validation set results of each algorithm"}
+dotplot(results)
+```
+
+
+## Final model
+
+As it can bee seen in the dotplot, the best model both in accuracy and kappa is the **Random Forest** that has been tuned through changes in the hiperparameters **mtry**= 15 and **ntree** held constant as it had been found that there was no effect of the forest size into accuracy.
+
+We resent the following confusion Matrix with the test data:
+
+```{r}
+finalModel<-fit.rf.tuned
+set.seed(7)
+
+predictions <- predict(finalModel, validation)
+confusionMatrix(predictions, validation$status_group)
+```
+
+It can be seen that the accuracy obtained in the test dataset is the same that we had got in the train dataset. As a result, it can bee infered that the modeling is representative of the real data and that there is no overfitting.
+
+Therefore, accuracy in the train dataset is 0.8211567 and kappa 0.6274054 while on the test dataset accuracy is 0.8218 and kappa is 0.6283.
+
+Moreover, it should be highlighted that the 95% confidence interval is pretty narrow, conveying this way that it should be a robust model if it were to be used in real life predictions.
+
+Eventhough the kappa value is the highest among all the other models that have been calculated, it is still  significatively lower than the accuracy. Through research it has been found that kappa values between 0.61 and 0.8 to be substantially good by *Landis and Koch* eventhough they supplied no evidence to support it.
+
+Finally, sensitivity is at 0.88. Therefore the proportion of positives that are correctly identified as such is 88%. On the other hand, specificity is at 0.73. Therefore the proportion of negatives that are correctly identified as such is 73%. What this information indicates is that the final model of this study is better at predicting functioning wells rather than the non-functioning ones.
+
+We can plot to see the relevance of each variable inside the Random Forest:
+
+<center>
+
+```{r, fig.cap = "Result of Random Forest training, importance of each vairable"}
+plot(varImp(fit.rf.tuned))
+```
+
+</center>
+
+##  Scientific and personal conclusions
+
+The final conclusions of this study have been gathered around 4 main conceptual blocs:
+
+The first one being the difficulties of working with this kind of *on field data*. Where all the observations are very sensitive to the data collection. As a consequence of this sensibility of the data it has been determined that the present dataset might be widely wrongly collected and as a result response prediction is harder if not inaccurate. Also, it has a relevant impact in the preprocessing stage, not only increasing the working time but also the number of inputed variables, again decreasing as a result the potential accuracy.
+
+The second making reference to variable importance, it has been observed that overall geographical and time variables have a great effect over the response variable and therefore in the predictive models. While it has been found that others such as legal variables have had almost zero effect. Of course this statement could be expected as something as a **well** is strongly related to the environment and its surroundings. But it should also be brought up that the legal variables such as **funder** or **installer** were the ones to have an insane amount of levels, so all previous comments might be subject to how the levels have been treated.
+
+Then, it is important to highlight that computational complexity of the used predictive algorithms applied to a huge dataset has resulted into a very demanding computation process. Making it difficult to process everything, having up to 4 computers runing our code throughout night and day for over a week. As a result, time planning has been a key factor on the project developement.
+
+Finally, it has been found that hiperparameter tuning is a very important aspect of prediction model building. As it allows adjusting the chosen algorithms to each specific database. This is why a lot of the work done has been tuning oriented and has allowed this study to obtain better accuracy results and an improved prediction overall.
+
+
+
+
+
+
+
+
+
+
+ 

@@ -1,0 +1,322 @@
+---
+title: ""
+---
+
+
+```{r}
+ax <- list(
+  zeroline = F,
+  showline = T,
+  mirror = "ticks")
+```
+
+In this following part we shall explain how the clusters are organized by profiling them with the most informative data. We only present simple of the most relevant barplots here to speed up the process.
+
+```{r echo=FALSE}
+#load("ALT_aigua_sample_imputat.RData")
+
+#Calcula els valor test de la variable Xnum per totes les modalitats del factor P
+ValorTestXnum <- function(Xnum,P){
+  #freq dis of fac
+  nk <- as.vector(table(P)); 
+  n <- sum(nk); 
+  #mitjanes x grups
+  xk <- tapply(Xnum,P,mean);
+  #valors test
+  txk <- (xk-mean(Xnum))/(sd(Xnum)*sqrt((n-nk)/(n*nk))); 
+  #p-values
+  pxk <- pt(txk,n-1,lower.tail=F);
+  for(c in 1:length(levels(as.factor(P)))){if (pxk[c]>0.5){pxk[c]<-1-pxk[c]}}
+  return (pxk)
+}
+
+ValorTestXquali <- function(P,Xquali){
+  taula <- table(P,Xquali);
+  n <- sum(taula); 
+  pk <- apply(taula,1,sum)/n;
+  pj <- apply(taula,2,sum)/n;
+  pf <- taula/(n*pk);
+  pjm <- matrix(data=pj,nrow=dim(pf)[1],ncol=dim(pf)[2]);      
+  dpf <- pf - pjm; 
+  dvt <- sqrt(((1-pk)/(n*pk))%*%t(pj*(1-pj))); 
+  zkj <- dpf/dvt; 
+  pzkj <- pnorm(zkj,lower.tail=F);
+  for(c in 1:length(levels(as.factor(P)))){for (s in 1:length(levels(Xquali))){if (pzkj[c,s]> 0.5){pzkj[c,s]<-1- pzkj[c,s]}}}
+  return (list(rowpf=pf,vtest=zkj,pval=pzkj))
+}
+
+dades<-aigua4
+#dades<-df
+K<-dim(dades)[2]
+
+P<-k6$cluster
+nc<-length(levels(as.factor(P)))
+pvalk <- matrix(data=0,nrow=nc,ncol=K, dimnames=list(levels(P),names(dades)))
+nameP<-"Class"
+n<-dim(dades)[1]
+```
+
+### Basin
+
+The first, and quite relevant, way to separate the profiling is through the basin. We can see how for class 1, we have more a larger proportion of internal and wami / Ruvuu water basins than both other cuts. Secondly, for class 2, we can see how it's the only one with Lake Nyasa, it also has a larger proportion of the river Pangani than class 1 the same can be said from the river Rufiji. Both these two previous cuts are at the southern coast / Ruvuma. Finally, we can separate class three because they are the only ones with Lake Victoria as a basin. Also, for cut 3, they are not close to any of the rivers mentioned previously, only a tiny proportion are close to Rufiji.
+
+We can clearly see that the presence of the lakes Nyasa and Victoria are able to discern between cut 2 and 3, also if they have more rivers close.
+
+<center>
+
+```{r, fig.cap = "Profiling cluster: basin"}
+k<-7
+aux <- table(dades[,k], as.factor(P))
+marg <- table(as.factor(P))/n
+
+colourCount = length(unique(dades[,k]))
+getPalette = colorRampPalette(brewer.pal(8, "Pastel2"))
+color <- as.vector(getPalette(colourCount))
+
+plot_ly() %>% 
+    add_trace(x = as.factor(1:3), y = aux[1,], name = row.names(aux)[1],marker = list(color = color[1]), type = 'bar') %>%
+    add_trace(x = as.factor(1:3), y = aux[2,], name = row.names(aux)[2],marker = list(color = color[2]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[3,], name = row.names(aux)[3],marker = list(color = color[3]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[4,], name = row.names(aux)[4],marker = list(color = color[4]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[5,], name = row.names(aux)[5],marker = list(color = color[5]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[6,], name = row.names(aux)[6],marker = list(color = color[6]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[7,], name = row.names(aux)[7],marker = list(color = color[7]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[8,], name = row.names(aux)[8],marker = list(color = color[8]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[9,], name = row.names(aux)[9],marker = list(color = color[9]), type = 'bar')%>% 
+  layout(title = paste("Barplot with Cluster Cut and ", names(dades)[k]), yaxis = list(title = 'Count'), barmode = 'stack', xaxis = ax, yaxis = ax)
+```
+
+</center>
+
+### Extraction type
+
+Starting by cut 2, we know that if the extraction type is not ksb, india mark ii, or gravity it will not be from this class. Speaking of gravity, if we find a well that is extracted by gravity, it will most probably be from class 2, and if not it will be from class 3. If we find a method of extraction that isn't used by cut 2 we won't be sure where to put it, although if it's an india mark ii it will more probably be from cut 1, the same can be said about ksb.
+
+<center>
+
+```{r, fig.cap = "Profiling cluster: extraction_type"}
+k<-17
+aux <- table(dades[,k], as.factor(P))
+marg <- table(as.factor(P))/n
+
+colourCount = length(unique(dades[,k]))
+getPalette = colorRampPalette(brewer.pal(8, "Pastel2"))
+color <- as.vector(getPalette(colourCount))
+
+plot_ly() %>% 
+    add_trace(x = as.factor(1:3), y = aux[1,], name = row.names(aux)[1],marker = list(color = color[1]), type = 'bar') %>%
+    add_trace(x = as.factor(1:3), y = aux[2,], name = row.names(aux)[2],marker = list(color = color[2]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[3,], name = row.names(aux)[3],marker = list(color = color[3]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[4,], name = row.names(aux)[4],marker = list(color = color[4]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[5,], name = row.names(aux)[5],marker = list(color = color[5]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[6,], name = row.names(aux)[6],marker = list(color = color[6]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[7,], name = row.names(aux)[7],marker = list(color = color[7]), type = 'bar')%>%
+  layout(title = paste("Barplot with Cluster Cut and", names(dades)[k]), yaxis = list(title = 'Count'), barmode = 'stack', xaxis = ax, yaxis = ax)
+
+# Category 1 pretty mixed
+# Category 2 almost exclusevly gravity
+# Also pretty mixed
+```
+
+</center>
+
+### Payment
+
+Starting with the third class, these are the places that mostly don't ever pay. Maybe because they are also the places that don't have that many population around them. Otherwise, we can see that class 1 and class 2 are separated by if they pay according to a timeframe, or if the payment payed each bucket. For the former, we can see that the wells in class 2 usually pay more in an accorded timeframe. For the latter, they usually pay for the bucket or never pay.
+
+<center>
+
+```{r, fig.cap = "Profiling cluster: payment"}
+k<-20
+aux <- table(dades[,k], as.factor(P))
+marg <- table(as.factor(P))/n
+
+colourCount = length(unique(dades[,k]))
+getPalette = colorRampPalette(brewer.pal(8, "Pastel2"))
+color <- as.vector(getPalette(colourCount))
+
+plot_ly() %>% 
+    add_trace(x = as.factor(1:3), y = aux[1,], name = row.names(aux)[1],marker = list(color = color[1]), type = 'bar') %>%
+    add_trace(x = as.factor(1:3), y = aux[2,], name = row.names(aux)[2],marker = list(color = color[2]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[3,], name = row.names(aux)[3],marker = list(color = color[3]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[4,], name = row.names(aux)[4],marker = list(color = color[4]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[5,], name = row.names(aux)[5],marker = list(color = color[5]), type = 'bar')%>%
+  layout(title = paste("Barplot with Cluster Cut and", names(dades)[k]), yaxis = list(title = 'Count'), barmode = 'stack', xaxis = ax, yaxis = ax)
+
+# Category 1 almost half and half of the proportion is mixed with a good proportion of pay per bucket.
+# Category 2, less than half is never pay and most that pay monthly or annually are here.
+# Category 3, almost all never pay
+
+```
+
+</center>
+
+### Water quality
+
+If we remove the soft (by clicking the legend title), we have a much better representation. While most of them have soft water, if we find people with salty taste it will most probably be from the first cut, or the third. The inverse can be said if the water has a milky taste. Finally, if the water has a flouridic taste we will know for sure that it is from the second class.
+
+<center>
+
+```{r, fig.cap = "Profiling cluster: water quality"}
+k<-21
+aux <- table(dades[,k], as.factor(P))
+marg <- table(as.factor(P))/n
+
+colourCount = length(unique(dades[,k]))
+getPalette = colorRampPalette(brewer.pal(8, "Pastel2"))
+color <- as.vector(getPalette(colourCount))
+
+plot_ly() %>% 
+    add_trace(x = as.factor(1:3), y = aux[1,], name = row.names(aux)[1],marker = list(color = color[1]), type = 'bar') %>%
+    add_trace(x = as.factor(1:3), y = aux[2,], name = row.names(aux)[2],marker = list(color = color[2]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[3,], name = row.names(aux)[3],marker = list(color = color[3]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[4,], name = row.names(aux)[4],marker = list(color = color[4]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[5,], name = row.names(aux)[5],marker = list(color = color[5]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[6,], name = row.names(aux)[6],marker = list(color = color[6]), type = 'bar')%>%
+  layout(title = paste("Barplot with Cluster Cut and", names(dades)[k]), yaxis = list(title = 'Count'), barmode = 'stack', xaxis = ax, yaxis = ax)
+
+# Category 1 While most have af soft taste of water  many have salty
+# Category 2 Almost soft quality here
+# Category 3 Same as first but with higher proportion of milky
+```
+
+</center>
+
+### Source
+
+If the water source is a lake, it will be from cut 3 (even though we have clearly seen that cut 2 also has lakes, they might have considered it as a spring). Other intersting things we can see if that most machine dbh are from class 1, while most river sourced water is from class 2.
+
+<center>
+
+```{r, fig.cap = "Profiling cluster: Source"}
+k<-23
+aux <- table(dades[,k], as.factor(P))
+marg <- table(as.factor(P))/n
+
+colourCount = length(unique(dades[,k]))
+getPalette = colorRampPalette(brewer.pal(8, "Pastel2"))
+color <- as.vector(getPalette(colourCount))
+
+plot_ly() %>% 
+    add_trace(x = as.factor(1:3), y = aux[1,], name = row.names(aux)[1],marker = list(color = color[1]), type = 'bar') %>%
+    add_trace(x = as.factor(1:3), y = aux[2,], name = row.names(aux)[2],marker = list(color = color[2]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[3,], name = row.names(aux)[3],marker = list(color = color[3]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[4,], name = row.names(aux)[4],marker = list(color = color[4]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[5,], name = row.names(aux)[5],marker = list(color = color[5]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[6,], name = row.names(aux)[6],marker = list(color = color[6]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[7,], name = row.names(aux)[7],marker = list(color = color[7]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[8,], name = row.names(aux)[8],marker = list(color = color[8]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[9,], name = row.names(aux)[9],marker = list(color = color[9]), type = 'bar') %>%
+    add_trace(x = as.factor(1:3), y = aux[10,], name = row.names(aux)[10],marker = list(color = color[10]), type = 'bar') %>%
+  layout(title = paste("Barplot with Cluster Cut and", names(dades)[k]), yaxis = list(title = 'Count'), barmode = 'stack', xaxis = ax, yaxis = ax)
+
+# Category 1 Has a higher proportion of machine dbh than the others
+# Category 2 Most of the water is spring or river
+# Category 3 Similar to ategory 1 but much less machine dbh
+```
+
+</center>
+
+### Quadrants & latitude and longitude
+
+With the two following plots we can easily see how the cluster separated geographically the locations, we see cut 3 is mostly in the northern part of the country while cut 2 is around the sides and follows the belt center of tanzania. Finally we see cut 1 is a bit more tricky but it's mostly located near the sea and in the center of tanzania. Still looking at the quadrants we see how cut 2 and 1 are very similar.
+
+<center>
+
+```{r, fig.cap = "Profiling cluster: quadrants"}
+k<-27
+aux <- table(dades[,k], as.factor(P))
+marg <- table(as.factor(P))/n
+
+colourCount = length(unique(dades[,k]))
+getPalette = colorRampPalette(brewer.pal(8, "Pastel2"))
+color <- as.vector(getPalette(colourCount))
+
+plot_ly() %>% 
+    add_trace(x = as.factor(1:3), y = aux[1,], name = row.names(aux)[1],marker = list(color = color[1]), type = 'bar') %>%
+    add_trace(x = as.factor(1:3), y = aux[2,], name = row.names(aux)[2],marker = list(color = color[2]), type = 'bar')%>% 
+    add_trace(x = as.factor(1:3), y = aux[3,], name = row.names(aux)[3],marker = list(color = color[3]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[4,], name = row.names(aux)[4],marker = list(color = color[4]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[5,], name = row.names(aux)[5],marker = list(color = color[5]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[6,], name = row.names(aux)[6],marker = list(color = color[6]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[7,], name = row.names(aux)[7],marker = list(color = color[7]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[8,], name = row.names(aux)[8],marker = list(color = color[8]), type = 'bar')%>%
+    add_trace(x = as.factor(1:3), y = aux[9,], name = row.names(aux)[9],marker = list(color = color[9]), type = 'bar') %>%
+  layout(title = paste("Barplot with Cluster Cut and", names(dades)[k]), yaxis = list(title = 'Count'), barmode = 'stack', xaxis = ax, yaxis = ax)
+```
+
+```{r, fig.cap = "Profiling cluster: geo location"}
+clus_aigua4<-as.data.frame(aigua4)
+clus_aigua4$cluster<-factor(k6$cluster)
+
+g <- c(
+  scope = 'africa',
+  showframe = F,
+  showland = T,
+  landcolor = toRGB("grey90"),
+  showcoastlines = T,
+  countrycolor = toRGB("white"),
+  coastlinecolor = toRGB("white"),
+  projection = list(type = 'Mercator'),
+  list(lataxis = list(range = c(-12.5, 0))),
+  list(lonaxis = list(range = c(28, 42)))
+)
+
+p <- clus_aigua4 %>%
+  plot_geo(
+    locationmode = 'country names', sizes = c(1, 600), color = I("black")
+  ) %>%
+  add_trace(clus_aigua4 = aigua4,
+            y = ~latitude, x = ~longitude, 
+            color = ~cluster,
+            colors = c('cornflowerblue','seagreen2','coral'),
+            marker = list(opacity = 0.5,
+                          line = list(color = 'black', width = 0.5)), hoverinfo = 'none') %>% 
+  layout(title = "Geo Cluster Cut",  xaxis = ax, yaxis = ax)
+
+p  %>% layout(geo = g)
+```
+
+</center>
+
+### Elevation
+
+An interesting result is that cut 1 is mostly located around 680m of elevation and can be found at sea level. Cut 3 seems to be inside a plane, with a very small differential in elevation, if we disregard the outliers.
+
+<center>
+
+```{r, fig.cap = "Profiling cluster: elevation"}
+plot_ly(data = aigua4,
+        y = ~gps_height, 
+        type = "box", 
+        color = ~as.factor(P), colors = c('cornflowerblue','seagreen2','coral')) %>% 
+    layout(title = "Boxplot with Cluster Cut and gps_height",yaxis = list(title = 'Elevation'), barmode = 'stack')
+```
+
+</center>
+
+
+### Target feature
+
+Finally, it should be stated that both levels of the response variable are quite balanced in each class. Although in the second class we do find a higer proportion of functional (68.38% vs 31.61%) and the same in the third class, but not so much (56.1% vs 43.9%). 
+
+<center>
+
+```{r, fig.cap = "Profiling cluster: target variable"}
+k<-26
+aux <- table(dades[,k], as.factor(P))
+marg <- table(as.factor(P))/n
+
+plot_ly(
+  x = as.factor(1:3),
+  y = aux[1,], name = row.names(aux)[1],
+  type = "bar",
+   marker = list(color = '#D9FFB2')) %>% 
+    add_trace(y = aux[2,], name = row.names(aux)[2],
+              marker = list(color = '#cc5f47')) %>% 
+  layout(title = paste("Barplot with Cluster Cut and ", names(dades)[k]), yaxis = list(title = 'Count'), barmode = 'stack', xaxis = ax, yaxis = ax)
+```
+
+</center>
+
+Since we didn't find any class to be related closely to the target feature we end our profiling here. It's not getting us any closer to understand how the variable is distributed and what will help predict it.

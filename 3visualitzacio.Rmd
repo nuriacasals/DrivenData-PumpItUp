@@ -1,0 +1,282 @@
+---
+title: ''
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r echo=FALSE}
+load("ALT_aigua_sample_imputat.RData")
+#load('AC1_AC2.RData')
+# aigua4 <- aigua4[,-c(1)]
+colors <- rev(c("#cc5f47", "#D9FFB2"))
+```
+
+
+## PCA
+
+We have done a PCA with the all the numerical variables from our clean database:
+
+<center>
+
+```{r echo=FALSE}
+index_num <- which(sapply(aigua4,function(i) is.numeric(i)))
+dcon9 <- aigua4[,index_num]
+dcon9.2 <- dcon9
+knitr::kable(names(dcon9), caption = 'Variables to construct the PCA')
+```
+
+</center>
+
+If we look at the screeplot of the principal components we see that we should take the first 3, the sum of them is more than 80%. Still, as we only have 4 numerical variables versus the 25 categorical, it seems obvious that PCA won't summarize the cloud as well as other methods. We will look more closely at the MCA instead. Still let's look at the results of the PCA:
+
+```{r echo=FALSE}
+# PRINCIPAL COMPONENT ANALYSIS
+pc1 <- prcomp(dcon9.2, scale=T) 
+# print(pc1)
+```
+
+```{r echo=FALSE, include=FALSE}
+# WHICH PERCENTAGE OF THE TOTAL INERTIA IS REPRESENTED IN SUBSPACES?
+# pc1$sdev
+inerProj<- pc1$sdev^2 
+# inerProj
+totalIner<- sum(inerProj)
+# totalIner
+pinerEix<- 100*inerProj/totalIner
+# pinerEix
+```
+
+<center>
+```{r echo=FALSE, fig.cap = 'PCA scree plot'}
+par(mfrow=c(1,2))
+
+plot(pinerEix,main="Screeplot",xlab="Principal components", ylab="Variability [%]", col="royalblue",type='b',
+     axes = F)
+axis(1,1:length(index_num))
+axis(2)
+
+plot(100*cumsum(pc1$sdev[1:dim(dcon9.2)[2]]^2)/dim(dcon9.2)[2],main="Cummulated screeplot",xlab="Principal components", ylab="Variability [%]", col="royalblue",type='b',
+     axes = F)
+axis(1,1:length(index_num))
+axis(2)
+
+nd = 3  #number of PC until 80%
+```
+
+</center>
+
+We have selected `r nd` principal components in order to preserve at least the 80% of the variability.
+
+Visualization of the results:
+
+<center>
+
+  
+```{r, fig.cap="First factorial plane"}
+autoplot(prcomp(dcon9), data=aigua4,colour='status_group', colors =colors, loadings=T,loadings.label = TRUE,
+         loadings.colour = 'black', main='PCA first factorial plane', loadings.label.size = 4, loadings.label.colour = "blue") +   scale_colour_manual(values=colors) + theme_bw()
+```
+
+</center>
+
+
+As we suspected, the PCA from the `r length(index_num)` numerical features isn't very informative. Looking at the first factorial plane we can say that `longitude` and `latitude` return little information and aren't relevant to explain the target feature. We do see, however, how the more recent the construction year of the well (indicated by larger values), the more probability we have that a well is in functional condition, the same can be inferred with the elevation of the well. It seems the more elevated the well's are and the more recent they have been constructed the more likely they are to be functional. The inverse can also be applied, the older and lower elevation the wells we go, we will find more non functional wells. We have more evidence peenting the third factorial plane (constructed from the second and third components) that the construcion year might be quite relevant in if a well needs repair or not. Which in hindsight seems pretty obvious.
+
+<center>
+
+
+```{r, fig.cap="Third factorial plane"}
+autoplot(prcomp(dcon9), x= 2, y= 3,data=aigua4,colour='status_group', colors =colors, loadings=T,loadings.label = TRUE,
+         loadings.colour = 'black', main='PCA second factorial plane', loadings.label.size = 4, loadings.label.colour = "blue") +   scale_colour_manual(values=colors) + theme_bw()
+```
+
+</center>
+
+
+The second factorial plane is quite confusing and isn't really relevant to the discussion in finding information regarding the target feature. In the second factorial plane we find the distribution of the target to be almost random.
+
+## MCA
+
+As stated before, since we have many more categorical variables than numerical, it is more interesting for us to analyze the MCA than the PCA, since it will capture more information, We decided to do the follwing selection:
+
+```{r echo=FALSE}
+aiguaMCA<-aigua4
+aiguaMCA$date_recorded<-as.factor(aiguaMCA$date_recorded)
+charSup<-c(1,2,4,9,10,11,13,14,18,19,26,29)
+numSup<-c(3,5,6,16)
+```
+
+
+- Active categorical features: `r names(aiguaMCA[-c(charSup,numSup)])`
+
+- Supplementary categorical features: `r names(aiguaMCA[charSup])`
+
+- Supplementar numerical features: `r names(aiguaMCA[numSup])`
+
+Note that we are using the features we coded as categorical from numeric in the active variables we input, except population_2.
+
+```{r echo=FALSE, include = F}
+index_num_MCA <- which(sapply(aiguaMCA,function(i) is.numeric(i)))
+ac1 <- MCA(aiguaMCA, quanti.sup = numSup, quali.sup =charSup)
+
+nact = nrow(ac1$var$coord) # dimensio de l'espai dels individus
+p  = nrow(ac1$var$eta2)  # nombre de variables categoriques actives
+```
+
+Dimension of the individuals space: `r nact`
+
+Number of active character variables: `r p`
+
+Inertia in case of independency: `r 1/p`
+
+Looking at the screeplot is difficult as it's hard to decide where exactly we need to cut. We decided not to use all variables because we started to get singularity problems, we decided to remove the variables which have many different levels, installer, scheme_managment, etc. We have components that explain little of the data, the first one only explains `r ac1$eig[1,2]`% and the second one only `r ac1$eig[2,2]`%%.
+
+<center>
+```{r echo=FALSE, fig.cap = "MCA scree plot"}
+fviz_screeplot(ac1, addlabels = TRUE, ylim = c(0, 7.5), main='(Scree plot) Eigenvalues',ncp=nact)
+```
+</center>
+
+
+To select the number of significative dimensions we will start by eliminating the trivial inertia (`r 1/p`). We will achieve this by selecting the eigenvalues that are larger than $1/p$
+
+
+```{r echo=FALSE}
+i <- 1
+while (ac1$eig[i,1] > 1/p) i = i+1
+ndim = i-1
+```
+
+We have selected `r ndim` as signficitative components.
+
+<center>
+```{r echo=FALSE, fig.cap = "MCA scree plot with significant dimensions"}
+fviz_screeplot(ac1, addlabels = TRUE, ylim = c(0, 7.5), main='(Scree plot) Eigenvalues',ncp=ndim)
+```
+</center>
+
+### Plot of modalities
+
+```{r}
+factor_matrix <- as.data.frame(ac1$var$coord)
+```
+
+<center>
+
+```{r, fig.cap = "First factor plane MCA", fig.width= 8, fig.height= 8}
+factor_matrix$Var <-gsub("_.+", "", row.names(factor_matrix))
+factor_matrix$Cat <-gsub(".+_", "", row.names(factor_matrix))
+names(factor_matrix) <-gsub(" ", ".", names(factor_matrix))
+target <-  as.data.frame(head(tail(ac1$quali.sup$coord,8),2))
+names(target) <- gsub(" ", ".", names(target))
+
+
+b <- ggplot(factor_matrix, aes(x = Dim.1, y = Dim.2, label = Cat, color = Var)) + geom_text(size = 3) + theme_bw() +
+geom_hline(yintercept = 0, colour = "gray70") +
+geom_vline(xintercept = 0, colour = "gray70") +
+theme(legend.title=element_blank(), axis.title.y = element_text(size = rel(1.2)), 
+axis.title.x = element_text(size = rel(1)), title = element_text(size = rel(1)),
+legend.text = element_text(size = rel(0.5))) +
+labs(x = "PC 1", y = "PC 2") + 
+ggtitle("First factor plane") +
+annotate('text', x = target$Dim.1, y = target$Dim.2, label = row.names(target), color = colors, size = 5, fontface = 'bold')
+
+ggplotly(b)
+```
+
+</center>
+
+Unfortunatley, we aren't any close to finding any relevant features that could help us differentiate between the target categories. Since they are both so close together it's hard to say what other features might be more characteristic for one of the values than for the other. Checking for the first 5 planes we find similar results.
+
+## Clustering
+
+Since we have such a big dataset the way we will cluster is by first doing 2 K-means with a relative big $K$, in this case 14. Afterwards we will create the contingency table of the two k-means clusterings and make a hierarchical clustering of those centroides. To avoid noise we will do all this over the princiapal components that we found significative.
+
+```{r echo=FALSE, include = F}
+ac2 <- MCA(aiguaMCA, ncp = ndim, quanti.sup = numSup, quali.sup =charSup)
+Psi = ac2$ind$coord[,1:ndim]
+
+n1 = 14
+
+set.seed(1995)
+
+k1 <- kmeans(Psi,n1)
+k2 <- kmeans(Psi,n1)
+```
+
+
+```{r echo=FALSE}
+knitr::kable(table(k2$cluster,k1$cluster), caption = "K-means contingancy")
+clas <- (k2$cluster-1)*n1+k1$cluster
+freq <- table(clas)
+```
+
+We now have `r length(freq)` clusters. Let's do the hiearchichal cluster.
+
+<center>
+
+```{r, fig.cap = "Dendogram of the previous contingancy table. We try 3 cuts for now."}
+cdclas <- aggregate(as.data.frame(Psi),list(clas),mean)[,2:(ndim+1)]
+
+d2 <- dist(cdclas)
+h2 <- clust.euclid.average <- hclust(d2,method="ward.D2",members=freq)  # COMPARE THE COST
+
+k <- 3
+cols <- rainbow_hcl(k)
+dend <- color_branches(as.dendrogram(clust.euclid.average), k = k) # groupLabels = levels(as.factor(info$group))
+
+#labels_colors(dend)  <- as.vector(getPalette(colourCount))
+  
+dend <- assign_values_to_leaves_nodePar(dend, 1, "lab.cex")
+
+par(mfrow = c(1,1), mar = c(1,1,2,2))
+plot(dend, 
+     main = "Clustering \n",
+     nodePar = list(cex = .25))
+
+nc<-3
+
+c2 <- cutree(h2,nc)
+
+cdg <- aggregate((diag(freq/sum(freq)) %*% as.matrix(cdclas)),list(c2),sum)[,2:(ndim+1)]
+```
+
+</center>
+
+We do K-means with `r nc` classes and we take the previous centroids for the clustering initialization.
+
+The size of the clusters are:
+
+<center>
+
+```{r echo=FALSE}
+k6 <- kmeans(Psi,centers=cdg)
+knitr::kable(k6$size, caption = "Size of each cluster 1 to 3")
+```
+
+</center>
+
+Finally, let's see the partition visually on the data:
+
+<center>
+
+```{r, fig.cap = 'K-means clustering after 2 successive K-means and a hierchichal cluster'}
+datPsi<-as.data.frame(Psi)
+datPsi$cluster<-factor(k6$cluster)
+centers=as.data.frame(k6$centers)
+ggplot(data=datPsi, aes(x=datPsi$`Dim 1`, y=datPsi$`Dim 2`, color=cluster)) + 
+ geom_point()+geom_point(data=centers, aes(x=centers$`Dim 1`,y=centers$`Dim 2`,color='Center')) +
+ geom_point(data=centers, aes(x=centers$`Dim 1`,y=centers$`Dim 2`,color='Center'), size=52, alpha=.3)+theme(legend.position="none") +
+  labs(x = "PC 1", y = "PC 2")
+```
+
+</center>
+
+
+```{r, eval = F}
+save(ac1, ac2, file = "ALT_AC1_AC2.RData")
+save(k6, file = "ALT_cluster_final.RData")
+
+rm(list=setdiff(ls(), c("aigua4", "k6")))
+
+```

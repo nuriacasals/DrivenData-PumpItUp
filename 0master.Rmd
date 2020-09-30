@@ -1,0 +1,101 @@
+---
+title: "Data Mining"
+subtitle: 'Pump it up: water wells in Tanzania'
+author:
+  - "Adrià Aguiló"
+  - "Núria Casals"
+  - "Benjamí Parellada"
+date: "18/10/2017"
+output:
+  html_document:
+    toc: true
+    theme: united
+editor_options:
+  chunk_output_type: console
+---
+
+```{r, echo = F}
+knitr::opts_chunk$set(echo = F, warning = F, message = F)
+```
+
+
+```{r}
+# aigua <- read.csv('aigua.csv')
+# target <- read.csv("resposta.csv")
+# aigua <- merge(aigua, target)
+# save(aigua, file = 'aigua.RData')
+load("aigua.RData")
+
+library(ggplot2)
+library(ggmap)
+library(gplots)
+library(gridExtra)
+library(plotly)
+library(mice)
+library(VIM)
+library(Hmisc)
+library(forcats)
+library(RColorBrewer)
+library(FactoMineR)
+library(dendextend)
+library(caret)
+library(e1071)
+library(ggfortify)
+library(factoextra)
+library(splus2R)
+library(rattle)
+library(sqldf)
+library(vcd)
+library(corrplot)
+
+ax <- list(
+  zeroline = F,
+  showline = T,
+  mirror = "ticks"
+)
+```
+
+<style>
+body {
+text-align: justify}
+</style>
+
+# Introduction
+
+In this study we will be predicting which water pumps throughout Tanzania are functional, and which do not work at all based on a number of variables. A smart understanding of which waterpoints will fail can improve maintenance operations and ensure that clean, potable water is available to communities across Tanzania. To achieve this we have at our disposal a dataset from drivendata^[https://www.drivendata.org/competitions/7/pump-it-up-data-mining-the-water-table/page/25/] in which we have 59400 unique registers and 41 different features. The orginal source is the "Taarifa waterpoints dashboard"^[https://dashboard.taarifa.org] ^[http://taarifa.org/] ^[https://github.com/taarifa/TaarifaWaterpoints#taarifa-waterpoints], which aggregates data from the Tanzania Ministry of Water.
+
+The available data can be broke down into three classes: about what kind of pump is operating, when it was installed, and how it is managed. The dataset also has a terniary target feature: which pumps are functional, which need some repairs, and which don't work at all. We found many of the features we have are either useless to predict whether the pump is functional or not, or are filled with missing values. There are also groups of three variables which are encompassed with eachother, repeating most of the same information in a hierarchical manner. 
+
+Before we found this dataset we considered a dataset from Kaggle, the dataset was whether a subscription user, on a certain music platform, will churn or not^[https://www.kaggle.com/c/kkbox-churn-prediction-challenge]. We found three problems with this dataset and decided it was not optimal for this project. First, all variables were coded in ways which we would not be able to contextualize any of it. To ensure the privacy of their consumers, all data was scrambled and it was impossible for us to bring a better analysis without more concrete data. The second and third, are related with the size and structure of the dataset. The size of the dataset was unfathamabole, with over 32GB of uncompressed data our laptops were struggling to import them, even when we were able to achieve a successful import it was not with the familiar `data.frame`. On top of this, the structure of the data was burdensome as well. There were 3 different datasets, each with different data and structure. The first one had the information of every client and reasonable enough. The second one had, for each month, the method the client payed for the subscription. The third one had, for each day, the amount of songs that they listened to and the amount of songs that they listend from start to finish, the amount of songs they only listned 50% of, etc. We had in mind joining all three tables and using our usual techniques and algorithms, but how would be join it? The fundamental part of this problem was predicting if a user would churn depending on the amount of songs they listened to, to see if a pattern emerged from the user. If we joined it in the way we are used to we would have unused most of the information.
+
+The following study is broken down in three parts. The first, is a descriptive processing of the data, in which we will report the most relevant features found that relate to the target feature and also correct any mistakes ending up with a clean dataset which we will use in the following parts. The second part, consists of exploration techniques, PCA and clustering. Although, since we only dispose of a few numerical variables, we will not do a regular PCA, but a MCA. Finally, the third part will consist of the predictive algorithms we deemed optimal for our given dataset and return the predicitve quality that returned the best results.
+
+
+```{r, child = '1sample.Rmd'}
+
+```
+
+# Preprocessing
+
+```{r, child = '2processing.Rmd'}
+
+```
+
+# Visualitzation & Exploration
+
+```{r, child = '3visualitzacio.Rmd'}
+
+```
+
+## Profiling
+
+```{r, child = '4Profiling.Rmd'}
+
+```
+
+
+# Predictive algorithms
+
+```{r, child = '5Predictive.Rmd'}
+
+```

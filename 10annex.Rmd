@@ -1,0 +1,79 @@
+---
+title: 'Annex'
+---
+
+```{r, echo = F}
+knitr::opts_chunk$set(echo = F, warning = F, message = F)
+```
+
+
+## Bivariate plots
+
+<center>
+
+```{r}
+library(plotly)
+library(RColorBrewer)
+ax <- list(
+  zeroline = F,
+  showline = T,
+  mirror = "ticks"
+)
+
+colors <- c("#cc5f47", "#FFFFB3", "#D9FFB2")
+
+load('~/Dropbox/Treball Mineria/Segona entrega/IMATGES ALTERNATIVES/ALT_aigua_sample_imputat.RData')
+
+aux_aigua <- aigua4[, !names(aigua4) %in% c('scheme_name', 'installer', 'lga', 'ward','response', 'funder')]
+
+class_var <- sapply(aux_aigua, class)
+
+r <- which(names(aux_aigua) == 'status_group')
+
+l <- htmltools::tagList()
+j <- htmltools::tagList()
+i <- z <- 1
+for(k in seq_along(class_var)){
+    if(class_var[k] != "factor" & k != r){
+    
+    # boxplot
+    l[[i]] <- plot_ly(type = "box") %>% 
+      add_boxplot(x = aux_aigua[,k], color = aux_aigua[,r], colors = colors, boxpoints = "outliers") %>% 
+      layout(title = paste("Distribution of", names(aux_aigua)[k], "by response"),
+             showlegend = T, xaxis = ax, yaxis = ax) 
+    
+    i <- i + 1
+    } else if(k != r){
+Frequency <- data.frame(table(aux_aigua[,k], aux_aigua[,r]))
+    
+    colourCount = length(unique(aux_aigua[,k]))
+    getPalette = colorRampPalette(brewer.pal(8, "Pastel2"))
+    color <- as.vector(getPalette(colourCount))
+    
+    Frequency$Proportion[Frequency$Var2 == "functional"] <- Frequency$Freq[Frequency$Var2 == "functional"]/sum(Frequency$Freq[Frequency$Var2 == "functional"])
+    Frequency$Proportion[Frequency$Var2 == "functional needs repair"] <- Frequency$Freq[Frequency$Var2 == "functional needs repair"]/sum(Frequency$Freq[Frequency$Var2 == "functional needs repair"])
+    Frequency$Proportion[Frequency$Var2 == "non functional"] <- Frequency$Freq[Frequency$Var2 == "non functional"]/sum(Frequency$Freq[Frequency$Var2 == "non functional"])
+    
+    
+    knitr::kable(table(aux_aigua[,k], aux_aigua[,r]), caption = paste("Taula de contingencia", names(aux_aigua)[k], "vs. response"))
+    
+    #Barplot
+    b <- ggplot(Frequency, aes(x = reorder(Var1, Proportion), y = Proportion, fill = Var1)) +
+      geom_bar(stat= "identity") +
+      facet_grid(~Var2) + theme_light() +
+        ggtitle(paste("Distribution of", names(aux_aigua)[k], "by response")) + 
+        theme(plot.title = element_text(hjust = 0.5)) + 
+        scale_x_discrete(name = paste(names(aux_aigua)[k])) + 
+        scale_fill_manual(values = color, name="") +
+        theme(axis.text.x = element_text(angle=90, hjust = 1))
+    j[[z]] <- ggplotly(b)
+    z <- z + 1
+    }
+}
+l
+j
+rm(l, j)
+
+```
+
+</center>

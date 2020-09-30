@@ -1,0 +1,35 @@
+---
+title: "wrgsdvz"
+author: "maining"
+date: "1/10/2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+Initially our target variable `status_group`, which recorded the status of the well in three categories, contained the level **functional needs repair** which we removed due to the sheer interest of the current study to determinate whether a well is or isn't functional, a binary target. Besides the study's aim, the deleted level was scarce, therefore it's removal makes the response variable be almost perfectly balanced. After removing these values we ended up with 57,588 observations. Second, we decided to also remove the variables which had missing values at either latitude and consequently missing values at longitude, more information on this later, but we did this now to better select the sample.
+
+After first plowing through with all the observations, we ran into problems with the computational costs of some algorithms, such as *random forest*, was too high, a decision of reducing the database's size was made. We took a random sample of only 20,000 rows, reducing 66% of the orginal size. Previous to making a sample we checked to see if there was an intrinisc structure to the data, as could be if it was temporal data or any other structure, none was found so we proceeded to create the sample. It was important to check that we did not break the original strucutre of the data as we wanted a sample to correctly sample to whole.  
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+aigua$longitude[aigua$longitude==0]<-NA
+aigua$latitude[aigua$latitude==-2e-08]<-NA
+aigua <- aigua[which(!is.na(aigua$longitude)),]
+
+resposta1 <- resposta[which(resposta$id %in% aigua$id),]
+
+resposta1 <- droplevels(resposta1[-which(resposta1$status_group=="functional needs repair"),])
+
+set.seed(100)
+chosen <- sample(resposta1$id,20000)
+resposta1 <- resposta1[which(resposta1$id %in% chosen),]
+aigua1 <- aigua[which(aigua$id %in% chosen),]
+
+aigua2 <- sqldf('SELECT * FROM aigua1 AS r1 LEFT JOIN resposta1 AS r2  ON r1.id = r2.id')
+aigua2 <- aigua2[,-41]#trec la id repetida
+aigua <- aigua2
+
+rm(list=setdiff(ls(), "aigua"))
+
+#save.image("~/Documents/Universitat/Quart/Primer/Mineria/Segona entrega/aiguaSample.RData")
+```
