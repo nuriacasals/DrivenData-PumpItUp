@@ -6,9 +6,9 @@ Benjamí Parellada
 
 In this repository you will find:
 
-*Introduction
-*Preprocessing
-  *Features being removed
+* Introduction
+* Preprocessing
+  * Features being removed
   *Features which the missing value level had to be recodified
   *Variables with incorrect class
   *Numerical variables being categorized
